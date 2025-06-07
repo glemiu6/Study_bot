@@ -84,13 +84,13 @@ def vector_db(chunks, chunk_transformed):
     metadatas=[]
 
     for chunk, emb in zip(chunks, chunk_transformed):
-        hash=hash_text(chunk)
-        if hash in existing:
+        h=hash_text(chunk)
+        if h in existing:
             continue
         ids.append(str(uuid.uuid4()))
         new_chunks.append(chunk)
         new_chunk_transformed.append(emb)
-        metadatas.append({"hash":hash})
+        metadatas.append({"hash":h})
 
 
     collection.add(
