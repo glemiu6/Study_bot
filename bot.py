@@ -4,6 +4,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 from docx import Document
 from langchain_ollama import OllamaLLM
+import uuid
+import hashlib
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
 llm = OllamaLLM(model="llama3.2")
@@ -56,22 +58,47 @@ def transformer(chunk):
     return embeddings
 
 
+def hash_text(text):
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
-def vector_db(chunks,chunk_transformed):
+
+def vector_db(chunks, chunk_transformed):
     try:
         collection = client.get_collection('my_collection')
         print("got collection")
-
-    except Exception as e:
+    except:
         collection = client.create_collection('my_collection')
         print("created collection")
 
+    existing = set()
+    results = collection.get(include=["metadatas"])
+    metadatas = results.get("metadatas", [])
+
+    for m in metadatas:
+        if m and "hash" in m:
+            existing.add(m["hash"])
+
+    ids=[]
+    new_chunks=[]
+    new_chunk_transformed=[]
+    metadatas=[]
+
+    for chunk, emb in zip(chunks, chunk_transformed):
+        hash=hash_text(chunk)
+        if hash in existing:
+            continue
+        ids.append(str(uuid.uuid4()))
+        new_chunks.append(chunk)
+        new_chunk_transformed.append(emb)
+        metadatas.append({"hash":hash})
+
 
     collection.add(
-        documents=chunks,
-        embeddings=chunk_transformed,
-        ids=[str(i) for i in range(len(chunks))]
-        )
+        documents=new_chunks,
+        embeddings=new_chunk_transformed,
+        ids=ids,
+        metadatas=metadatas
+    )
 
     return collection
 
@@ -83,20 +110,22 @@ def query_vector_db(collection,query,top_k=3):
     result=collection.query(query_embeddings=[query_embeddings],n_results=top_k)
     relevant_text=result['documents'][0]
     context="\n".join(relevant_text)
-    prompt = f"Respond to the following question using this context:\n{context}\nQuestion: {query}"
+    prompt = f"Respond in the language the file is with the following question using this context:\n{context}\n Question: {query}"
     return llm.invoke(prompt)
 
+def process(texts):
+    chunks=chunking(texts)
+    chunk_transformed=transformer(chunks)
+    return vector_db(chunks, chunk_transformed)
 
 if __name__ == "__main__":
-    file_path = "07_Pares_AleatoÌrios (3).pdf"
+    file_path = "Laboratory 6.1-6.2.pdf"
     text = read_files(file_path)
-    chunks = chunking(text)
-    embeddings = transformer(chunks)
-    collection = vector_db(chunks, embeddings)
+    collection = process(text)
 
-    Question = ("What is Pares Aleatorias?")
+    Question = ("Whats the file main topic?")
     ans = query_vector_db(collection, Question)
 
     with open(f"responss.txt", "w") as f:
-        f.write(ans)
+        f.write(ans+'\n')
         print("All done")
