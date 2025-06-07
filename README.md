@@ -88,6 +88,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 from docx import Document
 from langchain_ollama import OllamaLLM
+import uuid
+import hashlib
 ```
 Then we declare the model to use in encoding , the llm and the database:
 ```python
@@ -161,21 +163,47 @@ Create a Vector Database using the [chromadb](https://pypi.org/project/chromadb/
 With this database we store the vectors from the transformer in the db and the chunk corresponding to the vector.
 
 ```python
-def vector_db(chunks,chunk_transformed):
+def hash_text(text):
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def vector_db(chunks, chunk_transformed):
     try:
         collection = client.get_collection('my_collection')
         print("got collection")
-
-    except Exception as e:
+    except:
         collection = client.create_collection('my_collection')
         print("created collection")
 
+    existing = set()
+    results = collection.get(include=["metadatas"])
+    metadatas = results.get("metadatas", [])
+
+    for m in metadatas:
+        if m and "hash" in m:
+            existing.add(m["hash"])
+
+    ids=[]
+    new_chunks=[]
+    new_chunk_transformed=[]
+    metadatas=[]
+
+    for chunk, emb in zip(chunks, chunk_transformed):
+        hash=hash_text(chunk)
+        if hash in existing:
+            continue
+        ids.append(str(uuid.uuid4()))
+        new_chunks.append(chunk)
+        new_chunk_transformed.append(emb)
+        metadatas.append({"hash":hash})
+
 
     collection.add(
-        documents=chunks,
-        embeddings=chunk_transformed,
-        ids=[str(i) for i in range(len(chunks))]
-        )
+        documents=new_chunks,
+        embeddings=new_chunk_transformed,
+        ids=ids,
+        metadatas=metadatas
+    )
 
     return collection
 ```
