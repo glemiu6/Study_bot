@@ -92,25 +92,36 @@ def vector_db(chunks, chunk_transformed):
         new_chunk_transformed.append(emb)
         metadatas.append({"hash":h})
 
-
-    collection.add(
-        documents=new_chunks,
-        embeddings=new_chunk_transformed,
-        ids=ids,
-        metadatas=metadatas
-    )
+    if new_chunks:
+        collection.add(
+            documents=new_chunks,
+            embeddings=new_chunk_transformed,
+            ids=ids,
+            metadatas=metadatas
+        )
 
     return collection
 
 
 
 
-def query_vector_db(collection,query,top_k=3):
+def query_vector_db(collection,query,chat_history=None,top_k=3):
     query_embeddings = model.encode(query).tolist()
     result=collection.query(query_embeddings=[query_embeddings],n_results=top_k)
     relevant_text=result['documents'][0]
     context="\n".join(relevant_text)
-    prompt = f"Respond in the language the file is with the following question using this context:\n{context}\n Question: {query}"
+
+    memory=''
+    if chat_history:
+        for turn in chat_history:
+            user_text=turn.get("user","")
+            bot_text=turn.get("bot","")
+            memory+=f"User:{user_text}\n Bot:{bot_text}\n"
+    prompt =(
+        f"You are answering questions about a file. Use the context below and previous turns.\n"
+        f"{memory}\n"
+        f"Context:\n{context}\n"
+        f"Question: {query}")
     return llm.invoke(prompt)
 
 def process(texts):
@@ -119,13 +130,20 @@ def process(texts):
     return vector_db(chunks, chunk_transformed)
 
 if __name__ == "__main__":
-    file_path = "Laboratory 6.1-6.2.pdf"
+    ch=[]
+    file_path = "bioinformatics_28_7_991.pdf"
     text = read_files(file_path)
     collection = process(text)
 
-    Question = ("Whats the file main topic?")
-    ans = query_vector_db(collection, Question)
+    Question = ("Whats the main idea from the file?",
+                "Give me some exemples from the most important part")
+    for q in Question:
+        ans = query_vector_db(collection, q,chat_history=ch)
+        ch.append({"User":q,
+                   "Bot":ans}
+                  )
 
     with open(f"responss.txt", "w") as f:
-        f.write(ans+'\n')
+        for turn in ch:
+            f.write(f"Q: {turn['User']}\nA: {turn['Bot']}\n\n")
         print("All done")
