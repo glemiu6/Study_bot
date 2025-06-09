@@ -210,29 +210,57 @@ def vector_db(chunks, chunk_transformed):
 After the vector database is made, is needed to transform the question/query like we did with the files.  
 With this function we put the question in the DB and we pull the most similar and correct response for the question by giving the llm a prompt to answer the question using the context.
 ```python
-def query_vector_db(collection,query,top_k=3):
+def query_vector_db(collection,query,chat_history=None,top_k=3):
     query_embeddings = model.encode(query).tolist()
     result=collection.query(query_embeddings=[query_embeddings],n_results=top_k)
     relevant_text=result['documents'][0]
     context="\n".join(relevant_text)
-    prompt = f"Respond to the following question using this context:\n{context}\nQuestion: {query}"
+    
+    memory=""
+    if chat_history:
+        for turn in chat_history:
+            user_text=turn.get("User","")
+            bot_text=turn.get("Bot","")
+            memory+=f"User:{user_text}\n Bot:{bot_text}"
+    prompt =(
+        f"You are answering questions about a file. Use the context below and previous turns.\n"
+        f"{memory}\n"
+        f"Context:\n{context}\n"
+        f"Question: {query}")
+    
     return llm.invoke(prompt)
 ```
-To make it all work, combine them in the main function
-```python
-if __name__ == "__main__":
-    file_path = "07_Pares_AleatoÌrios (3).pdf"
-    text = read_files(file_path)
-    chunks = chunking(text)
-    embeddings = transformer(chunks)
-    collection = vector_db(chunks, embeddings)
 
-    Question = ("What is Pares Aleatorias?")
-    ans = query_vector_db(collection, Question)
+Also added a function where the functions are called so the `main`will look cleaner
+```python
+def process(texts):
+    chunks=chunking(texts)
+    chunk_transformed=transformer(chunks)
+    return vector_db(chunks, chunk_transformed)
+```
+
+To make it all work, combine them in the main function.  
+Make a empty list `ch` and with the new upgrade , we can add multiple questions about the file and save them in the memory for improvement.
+```python
+ch=[]
+    file_path = "bioinformatics_28_7_991.pdf"
+    text = read_files(file_path)
+    collection = process(text)
+
+    Question = ("Whats the main idea from the file?",
+                "Give me some exemples from the most important part")
+    for q in Question:
+        ans = query_vector_db(collection, q,chat_history=ch)
+        ch.append({"User":q,
+                   "Bot":ans}
+                  )
+
     
 ```
 And to make the reading easier, make an output file.
 ```python
     with open(f"responss.txt", "w") as f:
-        f.write(ans)
+        for turn in ch:
+            f.write(f"Q: {turn['User']}\nA: {turn['Bot']}\n\n")
+        print("All done")
 ```
