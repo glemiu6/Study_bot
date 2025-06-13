@@ -3,7 +3,7 @@
 ## Artiști principali:
 - Imagine Dragons
 - The Killers
-- Arctic Monkeys
+- Arctic Monkeys.
 
 ## Data și ora:
 - 15 iulie 2025
