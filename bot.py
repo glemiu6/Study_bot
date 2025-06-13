@@ -141,10 +141,17 @@ if __name__ == "__main__":
 
     chat_history = []
     questions = [
-        "Whats the main topic of this file?"
+        "How is this article structured?",
+        "What is bioinformatics?"
     ]
 
     for q in questions:
         answer = rag.query(file_path,q, chat_history=chat_history)
         chat_history.append({"User": q, "Bot": answer})
         print(f"Q: {q}\nA: {answer}\n")
+
+    with open(f"respons.txt", "w") as f:
+        for turn in chat_history:
+            f.write(f"Q: {turn['User']}\nA: {turn['Bot']}\n\n")
+
+    print("All done")
